@@ -1,4 +1,6 @@
-package com.u91porn.data.network;
+package com.u91porn.data.network.apiservice;
+
+import com.u91porn.data.network.Api;
 
 import io.reactivex.Observable;
 import retrofit2.http.Field;
@@ -23,7 +25,7 @@ public interface NoLimit91PornServiceApi {
      */
     @Headers({"Domain-Name: " + Api.PORN91_VIDEO_DOMAIN_NAME})
     @GET("/index.php")
-    Observable<String> indexPhp(@Header("Referer") String referer);
+    Observable<String> porn91VideoIndexPhp(@Header("Referer") String referer);
 
     /**
      * 访问页面获取视频地址页面
@@ -99,11 +101,13 @@ public interface NoLimit91PornServiceApi {
     /**
      * 我的收藏
      *
+     * @param page    page
+     * @param referer ref
      * @return ob
      */
     @Headers({"Domain-Name: " + Api.PORN91_VIDEO_DOMAIN_NAME})
     @GET("/my_favour.php")
-    Observable<String> myFavorite(@Query("page") int page, @Header("Referer") String referer);
+    Observable<String> myFavoriteVideo(@Query("page") int page, @Header("Referer") String referer);
 
     /**
      * 删除我的收藏
@@ -119,7 +123,7 @@ public interface NoLimit91PornServiceApi {
     @Headers({"Domain-Name: " + Api.PORN91_VIDEO_DOMAIN_NAME})
     @FormUrlEncoded
     @POST("/my_favour.php")
-    Observable<String> deleteMyFavorite(@Field("rvid") String rvid, @Field("removfavour") String removFavour, @Field("x") int x, @Field("y") int y, @Header("Referer") String referer);
+    Observable<String> deleteMyFavoriteVideo(@Field("rvid") String rvid, @Field("removfavour") String removFavour, @Field("x") int x, @Field("y") int y, @Header("Referer") String referer);
 
 
     /**
@@ -137,11 +141,11 @@ public interface NoLimit91PornServiceApi {
     Observable<String> favoriteVideo(@Query("cpaint_function") String cpaintFunction, @Query("cpaint_argument[]") String uId, @Query("cpaint_argument[]") String videoId, @Query("cpaint_argument[]") String ownerId, @Query("cpaint_response_type") String responseType, @Header("Referer") String referer);
 
     /**
-     * //http://91.91p18.space/show_comments2.php?VID=247965&start=1&comment_per_page=20
+     * //xxxxxxxxxxx/show_comments2.php?VID=247965&start=1&comment_per_page=20
      * 获取视频评论
      *
      * @param vid            视频id
-     * @param start          开始
+     * @param start          开始页码
      * @param commentPerPage 每页数
      * @return ob
      */
@@ -151,7 +155,7 @@ public interface NoLimit91PornServiceApi {
     Observable<String> getVideoComments(@Query("VID") String vid, @Query("start") int start, @Query("comment_per_page") int commentPerPage, @Header("Referer") String referer);
 
     /**
-     * http://91porn.com//ajax/myajaxphp.php?cpaint_function=process_comments&cpaint_argument[]=哈哈哈&cpaint_argument[]=6826296&cpaint_argument[]=248261&cpaint_response_type=json
+     * xxxxxxxxxx//ajax/myajaxphp.php?cpaint_function=process_comments&cpaint_argument[]=哈哈哈&cpaint_argument[]=6826296&cpaint_argument[]=248261&cpaint_response_type=json
      * 评论视频,无需邮箱验证，因为后台根本就不验证
      *
      * @param cpaintFunction 动作process_comments
@@ -177,11 +181,11 @@ public interface NoLimit91PornServiceApi {
     @Headers({"Domain-Name: " + Api.PORN91_VIDEO_DOMAIN_NAME})
     @FormUrlEncoded
     @POST("/post_comment.php")
-    Observable<String> replyComment(@Field("comment") String comment, @Field("username") String username, @Field("VID") String vId, @Field("comment_id") String commentId, @Header("Referer") String referer);
+    Observable<String> replyVideoComment(@Field("comment") String comment, @Field("username") String username, @Field("VID") String vId, @Field("comment_id") String commentId, @Header("Referer") String referer);
 
 
     /**
-     * <a href="http://91porn.com/search_result.php?viewtype=basic&amp;page=1&amp;search_type=search_videos&amp;search_id=内射&amp;sort=addate">添加时间</a>
+     * <a href="xxxxxx/search_result.php?viewtype=basic&amp;page=1&amp;search_type=search_videos&amp;search_id=内射&amp;sort=addate">添加时间</a>
      * 搜索
      *
      * @param viewtype   basic
@@ -193,10 +197,10 @@ public interface NoLimit91PornServiceApi {
      */
     @Headers({"Domain-Name: " + Api.PORN91_VIDEO_DOMAIN_NAME})
     @GET("/search_result.php")
-    Observable<String> search(@Query("viewtype") String viewtype, @Query("page") int page, @Query("search_type") String searchType, @Query("search_id") String searchId, @Query("sort") String sort, @Header("Referer") String referer, @Header("X-Forwarded-For") String ipAddress);
+    Observable<String> searchVideo(@Query("viewtype") String viewtype, @Query("page") int page, @Query("search_type") String searchType, @Query("search_id") String searchId, @Query("sort") String sort, @Header("Referer") String referer, @Header("X-Forwarded-For") String ipAddress);
 
     /**
-     * http://91porn.com/uvideos.php?UID=6465533&type=public&page=1
+     * xxxxxxxxx/uvideos.php?UID=6465533&type=public&page=1
      * 查看作者所有视频
      *
      * @param uid  作者id

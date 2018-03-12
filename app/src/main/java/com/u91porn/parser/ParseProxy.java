@@ -24,75 +24,71 @@ import java.util.List;
 public class ParseProxy {
     private static final String TAG = ParseProxy.class.getSimpleName();
 
-    public static BaseResult<List<ProxyModel>> parseGouBanJia(String html) {
+    public static BaseResult<List<ProxyModel>> parseXiCiDaiLi(String html, int page) {
         BaseResult<List<ProxyModel>> baseResult = new BaseResult<>();
         baseResult.setTotalPage(1);
         Document doc = Jsoup.parse(html);
-        Element element = doc.getElementById("list");
-        //解析列表
+
+        Element ipList = doc.getElementById("ip_list");
+        Elements trs = ipList.select("tr");
+        int trSize = trs.size();
         List<ProxyModel> proxyModelList = new ArrayList<>();
-        Elements trs = element.select("tbody").select("tr");
-        for (Element tr : trs) {
-            Elements tds = tr.select("td");
+        for (int i = 0; i < trSize; i++) {
+            //第一是标题，跳过
+            if (i == 0) {
+                continue;
+            }
+            //tr里的td
+            Elements tds = trs.get(i).select("td");
             ProxyModel proxyModel = new ProxyModel();
-            for (int i = 0; i < tds.size(); i++) {
-                Element td = tds.get(i);
-                switch (i) {
+            for (int j = 0; j < tds.size(); j++) {
+                Element td = tds.get(j);
+                switch (j) {
                     case 0:
-                        StringBuilder ip = new StringBuilder();
-                        Elements childs = td.getAllElements();
-                        String lastStr = null;
-                        for (int j = 0; j < childs.size() - 1; j++) {
-                            if (!childs.get(j).html().contains("display: none;")) {
-                                String iii = childs.get(j).text().trim();
-                                Logger.t(TAG).d("iiiiiiiiiiiiiiiiiiiiii:---------" + iii);
-                                if (!TextUtils.isEmpty(iii) && iii.length() < 4 && !iii.equals(lastStr)) {
-                                    lastStr = iii;
-                                    ip.append(iii);
-                                }
-                            }
-                        }
-                        proxyModel.setProxyIp(ip.toString());
-                        Logger.t(TAG).d("IP :" + ip);
-                        String port = childs.get(childs.size() - 1).text();
-                        proxyModel.setProxyPort(port);
-                        Logger.t(TAG).d("Port :" + port);
+                        //国家
                         break;
                     case 1:
-                        String anonymous = td.text();
-                        proxyModel.setAnonymous(anonymous);
-                        Logger.t(TAG).d(anonymous);
+                        //ip
+                        String ip = td.text();
+                        proxyModel.setProxyIp(ip);
                         break;
                     case 2:
-                        String type = td.text();
-                        if ("https".equalsIgnoreCase(type)) {
-                            proxyModel.setType(ProxyModel.TYPE_HTTPS);
-                        } else if ("socks".equalsIgnoreCase(type)) {
-                            proxyModel.setType(ProxyModel.TYPE_SOCKS);
-                        } else {
-                            proxyModel.setType(ProxyModel.TYPE_HTTP);
-                        }
-                        Logger.t(TAG).d(type);
+                        //端口
+                        String port = td.text();
+                        proxyModel.setProxyPort(port);
                         break;
                     case 3:
-                        String location = td.text();
-                        proxyModel.setLocation(location);
-                        Logger.t(TAG).d(location);
+                        //城市
+                        break;
+                    case 4:
+                        //匿名度
+                        String anonymous = td.text();
+                        proxyModel.setAnonymous(anonymous);
                         break;
                     case 5:
-                        String responseTime = td.text();
-                        proxyModel.setResponseTime(responseTime);
-                        Logger.t(TAG).d(responseTime);
+                        //类型 http https socket
+                        String type = td.text();
+                        if ("http".equalsIgnoreCase(type)) {
+                            proxyModel.setType(ProxyModel.TYPE_HTTP);
+                        } else if ("https".equalsIgnoreCase(type)) {
+                            proxyModel.setType(ProxyModel.TYPE_HTTPS);
+                        } else {
+                            proxyModel.setType(ProxyModel.TYPE_SOCKS);
+                        }
                         break;
                     case 6:
-                        String validateTime = td.text();
-                        proxyModel.setValidateTime(validateTime);
-                        Logger.t(TAG).d(validateTime);
+                        //速度
                         break;
                     case 7:
-                        String liveTime = td.text();
-                        proxyModel.setLiveTime(liveTime);
-                        Logger.t(TAG).d("liveTime:" + liveTime);
+                        //连接时间
+                        String responseTime = td.select("div").first().attr("title");
+                        proxyModel.setResponseTime(responseTime);
+                        break;
+                    case 8:
+                        //存活时间
+                        break;
+                    case 9:
+                        //验证时间
                         break;
                     default:
                 }
@@ -100,15 +96,16 @@ public class ParseProxy {
             proxyModelList.add(proxyModel);
         }
         baseResult.setData(proxyModelList);
-        //解析页码
-        try {
-            String totalPage = element.getElementsByClass("wp-pagenavi").first().select("a").last().text();
-            baseResult.setTotalPage(Integer.valueOf(totalPage));
-            Logger.t(TAG).d("total page:" + totalPage);
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (page == 1) {
+            Elements elements = doc.getElementsByClass("pagination").first().select("a");
+            if (elements.size() > 3) {
+                String totalPageStr = elements.get(elements.size() - 2).text();
+                Logger.t(TAG).d(totalPageStr);
+                if (TextUtils.isDigitsOnly(totalPageStr)) {
+                    baseResult.setTotalPage(Integer.parseInt(totalPageStr));
+                }
+            }
         }
-
         return baseResult;
     }
 }

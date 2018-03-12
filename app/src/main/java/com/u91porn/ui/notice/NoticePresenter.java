@@ -3,37 +3,32 @@ package com.u91porn.ui.notice;
 import android.arch.lifecycle.Lifecycle;
 import android.support.annotation.NonNull;
 
-import com.google.gson.Gson;
 import com.hannesdorfmann.mosby3.mvp.MvpBasePresenter;
 import com.trello.rxlifecycle2.LifecycleProvider;
-import com.u91porn.data.network.GitHubServiceApi;
+import com.u91porn.data.DataManager;
 import com.u91porn.data.model.Notice;
+import com.u91porn.di.PerActivity;
 import com.u91porn.rxjava.CallBackWrapper;
 import com.u91porn.rxjava.RxSchedulersHelper;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-
 import javax.inject.Inject;
-
-import io.reactivex.functions.Function;
 
 /**
  * @author flymegoc
  * @date 2018/1/26
  */
-
+@PerActivity
 public class NoticePresenter extends MvpBasePresenter<NoticeView> implements INotice {
-    private GitHubServiceApi gitHubServiceApi;
+
     private final static String CHECK_NEW_NOTICE_URL = "https://github.com/techGay/91porn/blob/master/notice.txt";
-    private Gson gson;
     private LifecycleProvider<Lifecycle.Event> provider;
 
+    private DataManager dataManager;
+
     @Inject
-    public NoticePresenter(GitHubServiceApi gitHubServiceApi, Gson gson, LifecycleProvider<Lifecycle.Event> provider) {
-        this.gitHubServiceApi = gitHubServiceApi;
-        this.gson = gson;
+    public NoticePresenter(LifecycleProvider<Lifecycle.Event> provider, DataManager dataManager) {
         this.provider = provider;
+        this.dataManager = dataManager;
     }
 
     @Override
@@ -42,15 +37,7 @@ public class NoticePresenter extends MvpBasePresenter<NoticeView> implements INo
     }
 
     public void checkNewNotice(final int versionCode, final CheckNewNoticeListener checkNewNoticeListener) {
-        gitHubServiceApi.checkNewNotice(CHECK_NEW_NOTICE_URL)
-                .map(new Function<String, Notice>() {
-                    @Override
-                    public Notice apply(String s) throws Exception {
-                        Document doc = Jsoup.parse(s);
-                        String text = doc.select("table.highlight").text();
-                        return gson.fromJson(text, Notice.class);
-                    }
-                })
+        dataManager.checkNewNotice(CHECK_NEW_NOTICE_URL)
                 .compose(RxSchedulersHelper.<Notice>ioMainThread())
                 .compose(provider.<Notice>bindUntilEvent(Lifecycle.Event.ON_DESTROY))
                 .subscribe(new CallBackWrapper<Notice>() {

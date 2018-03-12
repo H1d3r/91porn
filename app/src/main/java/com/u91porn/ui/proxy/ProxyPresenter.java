@@ -2,20 +2,17 @@ package com.u91porn.ui.proxy;
 
 import android.arch.lifecycle.Lifecycle;
 import android.support.annotation.NonNull;
+import android.text.TextUtils;
 
 import com.hannesdorfmann.mosby3.mvp.MvpBasePresenter;
 import com.trello.rxlifecycle2.LifecycleProvider;
-import com.u91porn.data.network.Api;
-import com.u91porn.data.network.NoLimit91PornServiceApi;
-import com.u91porn.data.network.ProxyServiceApi;
+import com.u91porn.data.DataManager;
 import com.u91porn.data.model.BaseResult;
 import com.u91porn.data.model.ProxyModel;
-import com.u91porn.parser.ParseProxy;
 import com.u91porn.rxjava.CallBackWrapper;
 import com.u91porn.rxjava.RxSchedulersHelper;
 import com.u91porn.utils.AddressHelper;
-import com.u91porn.utils.CheckResultUtils;
-import com.u91porn.utils.HeaderUtils;
+import com.u91porn.utils.MyProxySelector;
 import com.u91porn.utils.RegexUtils;
 import com.u91porn.utils.constants.Constants;
 
@@ -35,24 +32,26 @@ public class ProxyPresenter extends MvpBasePresenter<ProxyView> implements IProx
 
     private static final String TAG = ProxyPresenter.class.getSimpleName();
     private long successTime = 0;
-    private ProxyServiceApi proxyServiceApi;
     private LifecycleProvider<Lifecycle.Event> provider;
     private int totalPage = 1;
     private int page = 1;
-    private NoLimit91PornServiceApi noLimit91PornServiceApi;
+    private DataManager dataManager;
+    private MyProxySelector myProxySelector;
     private AddressHelper addressHelper;
+
     @Inject
-    public ProxyPresenter(ProxyServiceApi proxyServiceApi, LifecycleProvider<Lifecycle.Event> provider, NoLimit91PornServiceApi noLimit91PornServiceApi,AddressHelper addressHelper) {
-        this.proxyServiceApi = proxyServiceApi;
+    public ProxyPresenter(LifecycleProvider<Lifecycle.Event> provider, DataManager dataManager, MyProxySelector myProxySelector, AddressHelper addressHelper) {
         this.provider = provider;
-        this.noLimit91PornServiceApi = noLimit91PornServiceApi;
-        this.addressHelper=addressHelper;
+        this.dataManager = dataManager;
+        this.myProxySelector = myProxySelector;
+        this.addressHelper = addressHelper;
     }
 
     @Override
     public void testProxy(String proxyIpAddress, int proxyPort) {
         if (RegexUtils.isIP(proxyIpAddress) && proxyPort < Constants.PROXY_MAX_PORT && proxyPort > 0) {
-            noLimit91PornServiceApi.indexPhp(HeaderUtils.getIndexHeader(addressHelper))
+            myProxySelector.setTest(true, proxyIpAddress, proxyPort);
+            dataManager.testPorn91VideoAddress()
                     .compose(RxSchedulersHelper.<String>ioMainThread())
                     .subscribe(new CallBackWrapper<String>() {
                         @Override
@@ -73,12 +72,7 @@ public class ProxyPresenter extends MvpBasePresenter<ProxyView> implements IProx
                                 @Override
                                 public void run(@NonNull ProxyView view) {
                                     view.showContent();
-                                    if (CheckResultUtils.check91PronVideoConnectIsSuccess(s)) {
-                                        view.testProxySuccess("测试成功，用时：" + successTime + " ms");
-                                    } else {
-                                        view.testProxyError("访问成功，但无法获取内容");
-                                    }
-
+                                    view.testProxySuccess("测试成功，用时：" + successTime + " ms");
                                 }
                             });
                         }
@@ -105,15 +99,14 @@ public class ProxyPresenter extends MvpBasePresenter<ProxyView> implements IProx
     }
 
     @Override
-    public void parseGouBanJia(final boolean pullToRefresh) {
+    public void parseXiCiDaiLi(final boolean pullToRefresh) {
         if (pullToRefresh) {
             page = 1;
         }
-        proxyServiceApi.parseGouBanJia(getParseUrl(page))
-                .map(new Function<String, List<ProxyModel>>() {
+        dataManager.loadXiCiDaiLiProxyData(page)
+                .map(new Function<BaseResult<List<ProxyModel>>, List<ProxyModel>>() {
                     @Override
-                    public List<ProxyModel> apply(String s) throws Exception {
-                        BaseResult<List<ProxyModel>> baseResult = ParseProxy.parseGouBanJia(s);
+                    public List<ProxyModel> apply(BaseResult<List<ProxyModel>> baseResult) throws Exception {
                         if (page == 1) {
                             totalPage = baseResult.getTotalPage();
                         }
@@ -141,7 +134,7 @@ public class ProxyPresenter extends MvpBasePresenter<ProxyView> implements IProx
                             @Override
                             public void run(@NonNull ProxyView view) {
                                 if (page == 1) {
-                                    view.parseGouBanJiaSuccess(proxyModels);
+                                    view.parseXiCiDaiLiSuccess(proxyModels);
                                     view.showContent();
                                 } else {
                                     view.setMoreData(proxyModels);
@@ -173,7 +166,13 @@ public class ProxyPresenter extends MvpBasePresenter<ProxyView> implements IProx
 
     }
 
-    private String getParseUrl(int page) {
-        return Api.APP_PROXY_GUO_BAN_JIA_DOMAIN + "free/country/美国/index" + page + ".shtml";
+    @Override
+    public boolean isSetPorn91VideoAddress() {
+        return TextUtils.isEmpty(addressHelper.getVideo91PornAddress());
+    }
+
+    @Override
+    public void exitTest() {
+        myProxySelector.setTest(false, null, 0);
     }
 }

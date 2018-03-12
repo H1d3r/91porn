@@ -1,6 +1,5 @@
 package com.u91porn.ui.setting;
 
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
@@ -15,23 +14,24 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CompoundButton;
 
-import com.franmontiel.persistentcookiejar.PersistentCookieJar;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 import com.qmuiteam.qmui.widget.grouplist.QMUICommonListItemView;
 import com.qmuiteam.qmui.widget.grouplist.QMUIGroupListView;
 import com.sdsmdg.tastytoast.TastyToast;
 import com.u91porn.R;
+import com.u91porn.cookie.CookieManager;
+import com.u91porn.data.DataManager;
 import com.u91porn.data.network.Api;
+import com.u91porn.data.prefs.AppPreferencesHelper;
 import com.u91porn.ui.MvpActivity;
 import com.u91porn.ui.user.UserLoginActivity;
 import com.u91porn.utils.AddressHelper;
 import com.u91porn.utils.DialogUtils;
 import com.u91porn.utils.PlaybackEngine;
-import com.u91porn.utils.SPUtils;
+import com.u91porn.utils.SDCardUtils;
 import com.u91porn.utils.UserHelper;
 import com.u91porn.utils.constants.Constants;
-import com.u91porn.utils.constants.Keys;
 
 import java.util.List;
 
@@ -39,6 +39,8 @@ import javax.inject.Inject;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import cn.qqtheme.framework.picker.FilePicker;
+import cn.qqtheme.framework.util.StorageUtils;
 import me.jessyan.retrofiturlmanager.RetrofitUrlManager;
 import okhttp3.HttpUrl;
 
@@ -62,11 +64,15 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
     protected AddressHelper addressHelper;
 
     private AlertDialog testAlertDialog;
+    private AlertDialog moveOldDirDownloadVideoToNewDirDiaog;
     private boolean isTestSuccess = false;
     private String testBaseUrl;
 
     @Inject
-    protected PersistentCookieJar persistentCookieJar;
+    protected CookieManager cookieManager;
+
+    @Inject
+    protected DataManager dataManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +97,7 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
             btSettingExitAccount.setVisibility(View.VISIBLE);
         }
         testAlertDialog = DialogUtils.initLodingDialog(context, "测试中，请稍后...");
+        moveOldDirDownloadVideoToNewDirDiaog = DialogUtils.initLodingDialog(context, "移动文件中，请稍后...");
     }
 
     private void initListener() {
@@ -132,19 +139,19 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
         tsec.addItemView(addressItemWithChevron, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showAddressSettingDialog((QMUICommonListItemView) v, Keys.KEY_SP_CUSTOM_ADDRESS);
+                showAddressSettingDialog((QMUICommonListItemView) v, AppPreferencesHelper.KEY_SP_PORN_91_VIDEO_ADDRESS);
             }
         });
         tsec.addItemView(forumAddressItemWithChevron, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showAddressSettingDialog((QMUICommonListItemView) v, Keys.KEY_SP_FORUM_91_PORN_ADDRESS);
+                showAddressSettingDialog((QMUICommonListItemView) v, AppPreferencesHelper.KEY_SP_FORUM_91_PORN_ADDRESS);
             }
         });
         tsec.addItemView(pigAvAddressItemWithChevron, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showAddressSettingDialog((QMUICommonListItemView) v, Keys.KEY_SP_PIG_AV_ADDRESS);
+                showAddressSettingDialog((QMUICommonListItemView) v, AppPreferencesHelper.KEY_SP_PIG_AV_ADDRESS);
             }
         });
         tsec.addItemView(t66yAddressItemWithChevron, this);
@@ -154,25 +161,45 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
         QMUICommonListItemView playEngineItemWithChevron = qmuiGroupListView.createItemView(getString(R.string.playback_engine));
         playEngineItemWithChevron.setId(R.id.setting_item_player_engine_choice);
         playEngineItemWithChevron.setOrientation(QMUICommonListItemView.VERTICAL);
-        final int checkedIndex = (int) SPUtils.get(this, Keys.KEY_SP_PLAYBACK_ENGINE, PlaybackEngine.DEFAULT_PLAYER_ENGINE);
+        final int checkedIndex = dataManager.getPlaybackEngine();
         playEngineItemWithChevron.setDetailText(PlaybackEngine.PLAY_ENGINE_ITEMS[checkedIndex]);
         playEngineItemWithChevron.setAccessoryType(QMUICommonListItemView.ACCESSORY_TYPE_CHEVRON);
+
+        //自定义下载路径
+        final QMUICommonListItemView customDownloadPathItemWithChevron = qmuiGroupListView.createItemView("自定义视频下载文件夹");
+        customDownloadPathItemWithChevron.setOrientation(QMUICommonListItemView.VERTICAL);
+        String customDirPath = dataManager.getCustomDownloadVideoDirPath();
+        if (SDCardUtils.DOWNLOAD_VIDEO_PATH.equalsIgnoreCase(customDirPath)) {
+            customDownloadPathItemWithChevron.setDetailText("需先清空所有未完成下载，建议使用默认");
+        } else {
+            customDownloadPathItemWithChevron.setDetailText(customDirPath);
+        }
+
+        customDownloadPathItemWithChevron.setAccessoryType(QMUICommonListItemView.ACCESSORY_TYPE_CHEVRON);
+
+
         QMUIGroupListView.newSection(this)
                 .addItemView(playEngineItemWithChevron, this)
+                .addItemView(customDownloadPathItemWithChevron, new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        selectDownloadVideoDir(customDownloadPathItemWithChevron);
+                    }
+                })
                 .addTo(qmuiGroupListView);
 
 
         QMUIGroupListView.Section sec = QMUIGroupListView.newSection(this);
 
         //禁用自动释放内存功能
-        boolean isForbidden = (boolean) SPUtils.get(this, Keys.KEY_SP_FORBIDDEN_AUTO_RELEASE_MEMORY_WHEN_LOW_MEMORY, false);
+        boolean isForbidden = dataManager.isForbiddenAutoReleaseMemory();
         QMUICommonListItemView itemWithSwitchForbidden = qmuiGroupListView.createItemView("禁用自动释放内存功能");
         itemWithSwitchForbidden.setAccessoryType(QMUICommonListItemView.ACCESSORY_TYPE_SWITCH);
         itemWithSwitchForbidden.getSwitch().setChecked(isForbidden);
         itemWithSwitchForbidden.getSwitch().setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                SPUtils.put(SettingActivity.this, Keys.KEY_SP_FORBIDDEN_AUTO_RELEASE_MEMORY_WHEN_LOW_MEMORY, isChecked);
+                dataManager.setForbiddenAutoReleaseMemory(isChecked);
                 if (isChecked) {
                     showForbiddenReleaseMemoryTipInfoDialog();
                 }
@@ -180,29 +207,101 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
         });
 
         //非Wi-Fi环境下下载视频
-        boolean isDownloadNeedWifi = (boolean) SPUtils.get(this, Keys.KEY_SP_DOWNLOAD_VIDEO_NEED_WIFI, false);
+        boolean isDownloadNeedWifi = dataManager.isDownloadVideoNeedWifi();
         QMUICommonListItemView itemWithSwitch = qmuiGroupListView.createItemView("非Wi-Fi环境下下载视频");
         itemWithSwitch.setAccessoryType(QMUICommonListItemView.ACCESSORY_TYPE_SWITCH);
         itemWithSwitch.getSwitch().setChecked(!isDownloadNeedWifi);
         itemWithSwitch.getSwitch().setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                SPUtils.put(SettingActivity.this, Keys.KEY_SP_DOWNLOAD_VIDEO_NEED_WIFI, !isChecked);
+                dataManager.setDownloadVideoNeedWifi(!isChecked);
+            }
+        });
+
+        //开启91视频跳页功能
+        boolean isOpenSkipPage = dataManager.isOpenSkipPage();
+        QMUICommonListItemView openSkipPageItemWithSwitch = qmuiGroupListView.createItemView("开启91视频跳页功能");
+        openSkipPageItemWithSwitch.setAccessoryType(QMUICommonListItemView.ACCESSORY_TYPE_SWITCH);
+        openSkipPageItemWithSwitch.getSwitch().setChecked(isOpenSkipPage);
+        openSkipPageItemWithSwitch.getSwitch().setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                dataManager.setOpenSkipPage(isChecked);
             }
         });
 
         sec.addItemView(itemWithSwitch, null);
         sec.addItemView(itemWithSwitchForbidden, this);
+        sec.addItemView(openSkipPageItemWithSwitch, null);
         sec.addTo(qmuiGroupListView);
+    }
+
+    /**
+     * 自定义视频下载地址
+     */
+    public void selectDownloadVideoDir(final QMUICommonListItemView qmuiCommonListItemView) {
+        if (presenter.isHaveUnFinishDownloadVideo()) {
+            showMessage("当前有未下载完成视频，无法更改", TastyToast.INFO);
+            return;
+        }
+        FilePicker picker = new FilePicker(this, FilePicker.DIRECTORY);
+        picker.setRootPath(StorageUtils.getExternalRootPath());
+        picker.setTitleText("选择文件夹");
+        picker.setItemHeight(40);
+        picker.setOnFilePickListener(new FilePicker.OnFilePickListener() {
+            @Override
+            public void onFilePicked(String currentPath) {
+                if (dataManager.getCustomDownloadVideoDirPath().equalsIgnoreCase(currentPath + "/")) {
+                    showMessage("不能选择原目录哦", TastyToast.WARNING);
+                    return;
+                }
+                if (presenter.isHaveFinishDownloadVideoFile()) {
+                    showIsMoveOldDirVideoFileToNewDirDialog(currentPath, qmuiCommonListItemView);
+                } else {
+                    showMessage("设置成功", TastyToast.SUCCESS);
+                    qmuiCommonListItemView.setDetailText(currentPath);
+                    dataManager.setCustomDownloadVideoDirPath(currentPath);
+                }
+            }
+        });
+        picker.show();
+    }
+
+    private void showIsMoveOldDirVideoFileToNewDirDialog(final String newDirPath, final QMUICommonListItemView qmuiCommonListItemView) {
+        QMUIDialog.MessageDialogBuilder builder = new QMUIDialog.MessageDialogBuilder(context);
+        builder.setTitle("移动文件");
+        builder.setMessage("当前已选择新文件夹路径：" + newDirPath + "\n发现原下载文件夹有已下载完成视频，是否移动到新文件夹？\n PS:不移动则无法在下载完成界面打开文件");
+        builder.addAction("移动", new QMUIDialogAction.ActionListener() {
+            @Override
+            public void onClick(QMUIDialog dialog, int index) {
+                dialog.dismiss();
+                presenter.moveOldDownloadVideoToNewDir(newDirPath, qmuiCommonListItemView);
+            }
+        });
+        builder.addAction("不移动", new QMUIDialogAction.ActionListener() {
+            @Override
+            public void onClick(QMUIDialog dialog, int index) {
+                dialog.dismiss();
+                qmuiCommonListItemView.setDetailText(newDirPath);
+                dataManager.setCustomDownloadVideoDirPath(newDirPath);
+            }
+        });
+        builder.setLeftAction("返回", new QMUIDialogAction.ActionListener() {
+            @Override
+            public void onClick(QMUIDialog dialog, int index) {
+                dialog.dismiss();
+            }
+        });
+        builder.show();
     }
 
     private String getAddressSettingTitle(String key) {
         switch (key) {
-            case Keys.KEY_SP_CUSTOM_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_PORN_91_VIDEO_ADDRESS:
                 return "91porn-地址设置";
-            case Keys.KEY_SP_FORUM_91_PORN_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_FORUM_91_PORN_ADDRESS:
                 return "91论坛地址设置";
-            case Keys.KEY_SP_PIG_AV_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_PIG_AV_ADDRESS:
                 return "朱古力地址设置";
             default:
                 return "地址设置";
@@ -237,7 +336,7 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
                 testBaseUrl = address;
                 alertDialog.dismiss();
                 if (isTestSuccess) {
-                    saveToSpAndUpdateQMUICommonListItemView(context, key, qmuiCommonListItemView, address);
+                    saveToSpAndUpdateQMUICommonListItemView(key, qmuiCommonListItemView, address);
                 } else {
                     showConfirmDialog(qmuiCommonListItemView, address, key);
                 }
@@ -272,18 +371,18 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
      */
     private void resetOrUpdateAddress(String key, AddressHelper addressHelper) {
         switch (key) {
-            case Keys.KEY_SP_CUSTOM_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_PORN_91_VIDEO_ADDRESS:
                 // 全局 BaseUrl 的优先级低于 Domain-Name header 中单独配置的,其他未配置的接口将受全局 BaseUrl 的影响
                 if (!TextUtils.isEmpty(addressHelper.getVideo91PornAddress())) {
                     RetrofitUrlManager.getInstance().putDomain(Api.PORN91_VIDEO_DOMAIN_NAME, addressHelper.getVideo91PornAddress());
                 }
                 break;
-            case Keys.KEY_SP_FORUM_91_PORN_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_FORUM_91_PORN_ADDRESS:
                 if (!TextUtils.isEmpty(addressHelper.getForum91PornAddress())) {
                     RetrofitUrlManager.getInstance().putDomain(Api.PORN91_FORUM_DOMAIN_NAME, addressHelper.getForum91PornAddress());
                 }
                 break;
-            case Keys.KEY_SP_PIG_AV_ADDRESS:
+            case AppPreferencesHelper.KEY_SP_PIG_AV_ADDRESS:
                 if (!TextUtils.isEmpty(addressHelper.getPigAvAddress())) {
                     RetrofitUrlManager.getInstance().putDomain(Api.PIGAV_DOMAIN_NAME, addressHelper.getPigAvAddress());
                 }
@@ -295,13 +394,23 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
     /**
      * 仅仅只需将新地址保存到sp中即可，下次会自动读取
      *
-     * @param context                con
      * @param key                    key
      * @param qmuiCommonListItemView qc
      * @param address                address
      */
-    private void saveToSpAndUpdateQMUICommonListItemView(Context context, String key, QMUICommonListItemView qmuiCommonListItemView, String address) {
-        SPUtils.put(context, key, address);
+    private void saveToSpAndUpdateQMUICommonListItemView(String key, QMUICommonListItemView qmuiCommonListItemView, String address) {
+        switch (key) {
+            case AppPreferencesHelper.KEY_SP_PORN_91_VIDEO_ADDRESS:
+                dataManager.setPorn91VideoAddress(address);
+                break;
+            case AppPreferencesHelper.KEY_SP_FORUM_91_PORN_ADDRESS:
+                dataManager.setPorn91ForumAddress(address);
+                break;
+            case AppPreferencesHelper.KEY_SP_PIG_AV_ADDRESS:
+                dataManager.setPigAvAddress(address);
+                break;
+            default:
+        }
         qmuiCommonListItemView.setDetailText(address);
         showMessage("设置成功", TastyToast.INFO);
         testBaseUrl = "";
@@ -315,7 +424,7 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         dialog.dismiss();
-                        saveToSpAndUpdateQMUICommonListItemView(context, key, qmuiCommonListItemView, address);
+                        saveToSpAndUpdateQMUICommonListItemView(key, qmuiCommonListItemView, address);
                         //强制设置，则刷新地址
                         resetOrUpdateAddress(key, addressHelper);
                     }
@@ -345,16 +454,13 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
 
     private void beginTestAddress(String address, QMUICommonListItemView qmuiCommonListItemView, String key) {
         switch (key) {
-            case Keys.KEY_SP_CUSTOM_ADDRESS:
-
+            case AppPreferencesHelper.KEY_SP_PORN_91_VIDEO_ADDRESS:
                 presenter.test91PornVideo(address, qmuiCommonListItemView, key);
                 break;
-            case Keys.KEY_SP_FORUM_91_PORN_ADDRESS:
-
+            case AppPreferencesHelper.KEY_SP_FORUM_91_PORN_ADDRESS:
                 presenter.test91PornForum(address, qmuiCommonListItemView, key);
                 break;
-            case Keys.KEY_SP_PIG_AV_ADDRESS:
-
+            case AppPreferencesHelper.KEY_SP_PIG_AV_ADDRESS:
                 presenter.testPigAv(address, qmuiCommonListItemView, key);
                 break;
             default:
@@ -375,14 +481,14 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
     }
 
     private void showPlaybackEngineChoiceDialog(final QMUICommonListItemView qmuiCommonListItemView) {
-        final int checkedIndex = (int) SPUtils.get(this, Keys.KEY_SP_PLAYBACK_ENGINE, PlaybackEngine.DEFAULT_PLAYER_ENGINE);
+        final int checkedIndex = dataManager.getPlaybackEngine();
         new QMUIDialog.CheckableDialogBuilder(this)
                 .setTitle("播放引擎选择")
                 .setCheckedIndex(checkedIndex)
                 .addItems(PlaybackEngine.PLAY_ENGINE_ITEMS, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        SPUtils.put(SettingActivity.this, Keys.KEY_SP_PLAYBACK_ENGINE, which);
+                        dataManager.setPlaybackEngine(which);
                         qmuiCommonListItemView.setDetailText(PlaybackEngine.PLAY_ENGINE_ITEMS[which]);
                         showMessage("设置成功", TastyToast.SUCCESS);
                         dialog.dismiss();
@@ -398,13 +504,9 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
         builder.setPositiveButton("退出", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                //apiManager.cleanCookies();
-                persistentCookieJar.clear();
-                user.cleanProperties();
-//                SPUtils.put(SettingActivity.this, Keys.KEY_SP_USER_LOGIN_USERNAME, "");
-//                SPUtils.put(SettingActivity.this, Keys.KEY_SP_USER_LOGIN_PASSWORD, "");
-//                SPUtils.put(SettingActivity.this, Keys.KEY_SP_USER_AUTO_LOGIN, false);
 
+                cookieManager.cleanAllCookies();
+                user.cleanProperties();
                 Intent intent = new Intent(SettingActivity.this, UserLoginActivity.class);
                 startActivityForResultWithAnimotion(intent, Constants.USER_LOGIN_REQUEST_CODE);
                 finish();
@@ -433,13 +535,13 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
     }
 
     @Override
-    public void showTesting(boolean isTest) {
+    public void showTestingAddressDialog(boolean isTest) {
         isTestSuccess = false;
         testAlertDialog.show();
     }
 
     @Override
-    public void testSuccess(String message, QMUICommonListItemView qmuiCommonListItemView, String key) {
+    public void testNewAddressSuccess(String message, QMUICommonListItemView qmuiCommonListItemView, String key) {
         isTestSuccess = true;
         dismissDialog();
         showMessage(message, TastyToast.SUCCESS);
@@ -447,16 +549,35 @@ public class SettingActivity extends MvpActivity<SettingView, SettingPresenter> 
     }
 
     @Override
-    public void testFailure(String message, QMUICommonListItemView qmuiCommonListItemView, String key) {
+    public void testNewAddressFailure(String message, QMUICommonListItemView qmuiCommonListItemView, String key) {
         isTestSuccess = false;
         showMessage(message, TastyToast.ERROR);
         showAddressSettingDialog(qmuiCommonListItemView, key);
         dismissDialog();
     }
 
+    @Override
+    public void beginMoveOldDirDownloadVideoToNewDir() {
+        moveOldDirDownloadVideoToNewDirDiaog.show();
+    }
+
+    @Override
+    public void setNewDownloadVideoDirSuccess(String message) {
+        dismissDialog();
+        showMessage(message, TastyToast.SUCCESS);
+    }
+
+    @Override
+    public void setNewDownloadVideoDirError(String message) {
+        dismissDialog();
+        showMessage(message, TastyToast.ERROR);
+    }
+
     private void dismissDialog() {
         if (testAlertDialog.isShowing() && !isFinishing()) {
             testAlertDialog.dismiss();
+        } else if (moveOldDirDownloadVideoToNewDirDiaog.isShowing() && !isFinishing()) {
+            moveOldDirDownloadVideoToNewDirDiaog.dismiss();
         }
     }
 }
